@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Sum Custom Field Values</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="script.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.min.js" integrity="sha384-BBtl+eGJRgqQAUMxJ7pMwbEyER4l1g+O15P+16Ep7Q9Q+zqX6gSbd85u4mG4QzX+" crossorigin="anonymous"></script>
+
+    
+
+
+</head>
+
+<body>
+
+    <br />
+    <h1 class="text-center">Villas Estimated Costs</h1>
+
+    <p id="result"></p>
+
+
+    <div id="allCharts" class="row">
+        
+      </div>
+
+
+    <script>
+
+
+const baseUrl = "https://api.clickup.com/api/v2/";
+const key = "pk_96850942_591HEW39XQ8E0WB3APJSSXOPKI9PXF3M";
+
+const getFoldersUrl = baseUrl + "space/90181441183/folder";
+const getListsUrl = baseUrl + "folder/$id$/list";
+const getTasksUrl = baseUrl + "list/$id$/task?include_closed=true";
+
+async function FetchData(url, paramId)
+{
+
+    url = url.replace("$id$",paramId);
+
+    try {
+        let response = await fetch(url,{
+            headers:{
+                'Authorization':key
+            }
+        });
+        if(!response.ok)
+            throw new Error(`failed to fetch data: ${response.status } : ${response.statusText}`);
+
+        let data = await response.json();
+
+        return data;
+
+    } catch (error) {
+       console.log(error); 
+    }
+}
+
+chartDataAll = [];
+
+async function init(){
+
+    let chartData = [];
+
+    let data = await FetchData(getFoldersUrl);
+
+    let villaPromises = data.folders.map(async f => {
+        
+        let folderId = f.id;
+
+        let data2 = await FetchData(getListsUrl,folderId);
+
+        let listPromises = data2.lists.map(async list =>  {
+            
+            let listId = list.id;
+
+            let data3 = await FetchData(getTasksUrl,listId);
+
+            let sum = 0;
+            data3.tasks.forEach( task => {
+               
+                if(task.custom_fields)
+                    {
+                       estimateCost =  task.custom_fields.find(c => c.id == '966dba7c-1fc9-4b08-8a90-e040d078dcb4');
+
+                       if(estimateCost && !isNaN(estimateCost.value))
+                        sum+=estimateCost.value;
+                    }
+                });
+                return {
+                    name: list.name,
+                    sum: sum
+                };
+
+        });
+        let chartData = await Promise.all(listPromises);
+     
+        return {
+            villa: f.name,
+            data: chartData
+        };
+    });
+
+    chartDataAll = await Promise.all(villaPromises);
+
+    console.log(chartDataAll);
+
+    // build chart
+
+    const ctx = document.getElementById('myChart');
+
+    let allChartsDiv = document.getElementById('allCharts');
+
+
+chartDataAll.forEach(villa => {
+
+    colDiv = document.createElement('div');
+    colDiv.classList.add('col-6');
+
+    canv = document.createElement('canvas');
+
+    new Chart(canv, {
+        type: 'bar',
+        data: {
+          labels: [...villa.data.map(l => l.name)],
+          datasets: [{
+            label: villa.villa,
+            data: [...villa.data.map(l => l.sum)],
+            borderWidth: 1,
+            labelTextColor:'rgba(255,99,132,1)'
+          }]
+        },
+        options: {
+          scales: {
+            y: {
+              beginAtZero: true
+            },
+            x:{
+                ticks:{
+                    color:'rgb(23, 65, 99)',
+                    font:{
+                        size:16,
+                        style:'bold',
+                    }
+                }
+            }
+          },
+          plugins:{
+            legend:{
+                display:true,
+                labels:{
+                    color:'rgb(255,99,132)',
+                    font:{
+                        size:16,
+                        style:'bold',
+                    }
+                }
+            }
+          }
+        }
+      });
+
+    colDiv.appendChild(canv);
+    allChartsDiv.appendChild(colDiv);
+});
+}
+
+init();
+
+
+
+    </script>
+
+</body>
+
+</html>
+
